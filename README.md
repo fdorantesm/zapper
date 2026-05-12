@@ -85,7 +85,7 @@ The binary is written to `dist/zap-<os>-<arch>`.
 Install `zap` into a directory on your `PATH`:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/fdorantesm/go-zapper/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/fdorantesm/zapper/main/install.sh | bash
 ```
 
 Supported targets are macOS, Linux, and Windows on `amd64` and `arm64`.
