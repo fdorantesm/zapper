@@ -25,6 +25,15 @@ var appVersion = "0.1.0"
 
 const defaultTargets = "node_modules,venv,.venv,__pycache__,dist,build,coverage,.pytest_cache,.mypy_cache,.ruff_cache,.tox,.next,.nuxt,.turbo,.cache,.parcel-cache,target,.gradle,.terraform,.serverless,.DS_Store,Thumbs.db,npm-debug.log,yarn-debug.log,yarn-error.log,pnpm-debug.log"
 
+const cliBanner = `
+ _____                              
+|__  /__ _ _ __  _ __   ___ _ __   
+  / // _` + "`" + ` | '_ \| '_ \ / _ \ '__|  
+ / /| (_| | |_) | |_) |  __/ |     
+/____\__,_| .__/| .__/ \___|_|     
+          |_|   |_|                
+`
+
 type directoryInfo struct {
 	Path    string
 	ModTime time.Time
@@ -32,25 +41,41 @@ type directoryInfo struct {
 }
 
 type tuiModel struct {
-	directories []directoryInfo
-	selected    map[int]struct{}
-	deleting    map[string]struct{}
-	spinner     spinner.Model
-	cursor      int
-	offset      int
-	width       int
-	height      int
-	elapsed     time.Duration
-	savedSize   int64
-	dryRun      bool
-	busy        bool
-	message     string
+	directories   []directoryInfo
+	selected      map[int]struct{}
+	deleting      map[string]struct{}
+	spinner       spinner.Model
+	root          string
+	targets       map[string]struct{}
+	cursor        int
+	offset        int
+	width         int
+	height        int
+	elapsed       time.Duration
+	savedSize     int64
+	dryRun        bool
+	busy          bool
+	loading       bool
+	message       string
+	removingPaths map[string]struct{}
+	fadeOutRows   map[int]bool
+	fadeOutTimer  int
 }
 
 type deleteResultMsg struct {
 	deleted []directoryInfo
 	failed  map[string]error
 }
+
+type scanResultMsg struct {
+	directories []directoryInfo
+	elapsed     time.Duration
+	err         error
+}
+
+type fadeOutTickMsg struct{}
+
+type fadeOutCompleteMsg struct{}
 
 var (
 	appStyle      = lipgloss.NewStyle().Background(lipgloss.Color(appBg)).Foreground(lipgloss.Color("#D7DEE7"))
@@ -61,6 +86,7 @@ var (
 	greenStyle  = lipgloss.NewStyle().Background(lipgloss.Color(appBg)).Foreground(lipgloss.Color("#4AF626")).Bold(true)
 	yellowStyle = lipgloss.NewStyle().Background(lipgloss.Color(appBg)).Foreground(lipgloss.Color("#E0E300"))
 	cyanStyle   = lipgloss.NewStyle().Background(lipgloss.Color(appBg)).Foreground(lipgloss.Color("#7DD3FC"))
+	fadeStyle   = lipgloss.NewStyle().Background(lipgloss.Color(appBg)).Foreground(lipgloss.Color("#4A4A5A"))
 
 	headerStyle   = lipgloss.NewStyle().Background(lipgloss.Color("#B7BC00")).Foreground(lipgloss.Color("#10141A"))
 	rowStyle      = lipgloss.NewStyle().Background(lipgloss.Color(appBg)).Foreground(lipgloss.Color("#D7DEE7"))
@@ -71,6 +97,7 @@ var (
 
 func main() {
 	started := time.Now()
+	flag.Usage = printUsage
 
 	dirsFlag := flag.String("dirs", defaultTargets, "comma-separated file or directory names to remove")
 	rootFlag := flag.String("root", ".", "root directory to scan")
@@ -83,19 +110,38 @@ func main() {
 		log.Fatal("no directories specified; provide names with --dirs")
 	}
 
-	found, err := findDirectories(*rootFlag, targets)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	if *yes && !*dryRun {
+		printCLIBanner()
+		found, err := findDirectories(*rootFlag, targets)
+		if err != nil {
+			log.Fatal(err)
+		}
 		deleteDirectories(found)
 		return
 	}
 
-	if _, err := runTUI(found, time.Since(started), *dryRun); err != nil {
+	model, err := runTUI(*rootFlag, targets, time.Since(started), *dryRun)
+	if err != nil {
 		log.Fatal(err)
 	}
+	fmt.Printf("Thank you for using zap, you saved %s\n", formatBytes(model.savedSize))
+}
+
+func printUsage() {
+	printCLIBanner()
+	fmt.Fprintf(flag.CommandLine.Output(), "Usage:\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "  zap [options]\n\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "Examples:\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "  zap --dry-run\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "  zap --root ~/workspace --dirs node_modules,dist,.next\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "  zap --yes --dirs node_modules,venv\n\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "Options:\n")
+	flag.PrintDefaults()
+}
+
+func printCLIBanner() {
+	fmt.Fprint(flag.CommandLine.Output(), cliBanner)
+	fmt.Fprintln(flag.CommandLine.Output())
 }
 
 func parseDirectoryNames(value string) map[string]struct{} {
@@ -194,20 +240,22 @@ func directorySize(path string) (int64, error) {
 	return size, err
 }
 
-func runTUI(directories []directoryInfo, elapsed time.Duration, dryRun bool) (tuiModel, error) {
+func runTUI(root string, targets map[string]struct{}, elapsed time.Duration, dryRun bool) (tuiModel, error) {
 	spin := spinner.New()
 	spin.Spinner = spinner.Line
 	spin.Style = cyanStyle
 
 	model := tuiModel{
-		directories: directories,
-		selected:    make(map[int]struct{}),
-		deleting:    make(map[string]struct{}),
-		spinner:     spin,
-		width:       100,
-		height:      28,
-		elapsed:     elapsed,
-		dryRun:      dryRun,
+		root:     root,
+		targets:  targets,
+		selected: make(map[int]struct{}),
+		deleting: make(map[string]struct{}),
+		spinner:  spin,
+		width:    100,
+		height:   28,
+		elapsed:  elapsed,
+		dryRun:   dryRun,
+		loading:  true,
 	}
 
 	program := tea.NewProgram(model, tea.WithAltScreen())
@@ -225,18 +273,48 @@ func runTUI(directories []directoryInfo, elapsed time.Duration, dryRun bool) (tu
 }
 
 func (m tuiModel) Init() tea.Cmd {
-	return nil
+	return tea.Batch(m.spinner.Tick, scanDirectoriesCmd(m.root, m.targets))
 }
 
 func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if msg, ok := msg.(tea.WindowSizeMsg); ok {
+		m.width = msg.Width
+		m.height = msg.Height
+		m.clampOffset()
+	}
+
+	if m.loading {
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+
+		switch msg := msg.(type) {
+		case scanResultMsg:
+			m.directories = msg.directories
+			m.elapsed = msg.elapsed
+			m.loading = false
+			if msg.err != nil {
+				m.message = fmt.Sprintf("Scan failed: %v", msg.err)
+			} else if len(msg.directories) == 0 {
+				m.message = "No matching directories found."
+			}
+			return m, nil
+		case tea.KeyMsg:
+			if msg.String() == "ctrl+c" || msg.String() == "q" || msg.String() == "esc" {
+				return m, tea.Quit
+			}
+		}
+
+		return m, cmd
+	}
+
 	if m.busy {
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 
 		switch msg := msg.(type) {
 		case deleteResultMsg:
-			m.applyDeleteResult(msg)
-			return m, nil
+			m.startFadeOut(msg)
+			return m, fadeOutTickCmd()
 		case tea.KeyMsg:
 			if msg.String() == "ctrl+c" {
 				return m, tea.Quit
@@ -248,10 +326,6 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		m.clampOffset()
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q", "esc":
@@ -320,8 +394,17 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.message = fmt.Sprintf("Removing %d directories...", len(selected))
 			return m, tea.Batch(m.spinner.Tick, deleteSelectedCmd(selected))
 		}
+	case fadeOutTickMsg:
+		m.fadeOutTimer--
+		if m.fadeOutTimer > 0 {
+			return m, fadeOutTickCmd()
+		}
+		return m, func() tea.Msg { return fadeOutCompleteMsg{} }
+	case fadeOutCompleteMsg:
+		m.completeFadeOut()
 	case deleteResultMsg:
-		m.applyDeleteResult(msg)
+		m.startFadeOut(msg)
+		return m, fadeOutTickCmd()
 	}
 
 	return m, nil
@@ -329,6 +412,19 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m tuiModel) View() string {
 	content := strings.Builder{}
+
+	if m.loading {
+		loadingContent := fmt.Sprintf("%s Scanning directories...", m.spinner.View())
+		loadingBox := lipgloss.NewStyle().
+			Width(m.width).
+			Height(m.height).
+			Background(lipgloss.Color(appBg)).
+			Foreground(lipgloss.Color("#D7DEE7")).
+			Align(lipgloss.Center).
+			Render(loadingContent)
+		return loadingBox
+	}
+
 	content.WriteString(m.logo())
 	content.WriteString("\n\n")
 	content.WriteString(m.tableHeader())
@@ -497,10 +593,32 @@ func (m tuiModel) rows() string {
 			)
 			style = rowStyle.Inherit(cyanStyle)
 		}
+		fadeActive := m.fadeOutRows != nil && m.fadeOutRows[i]
+		if fadeActive {
+			dots := ""
+			switch m.fadeOutTimer {
+			case 3:
+				dots = ".  "
+			case 2:
+				dots = ".. "
+			case 1:
+				dots = "..."
+			}
+			line = fmt.Sprintf(
+				"%-2s %-3d %-*s %9s %10s ",
+				dots,
+				i+1,
+				pathWidth,
+				truncateMiddle(directory.Path, pathWidth),
+				"gone",
+				formatBytes(directory.Size),
+			)
+			style = fadeStyle
+		}
 		if _, ok := m.selected[i]; ok {
 			style = style.Inherit(selectedStyle)
 		}
-		if i == m.cursor {
+		if i == m.cursor && !fadeActive {
 			style = cursorStyle
 		}
 
@@ -594,17 +712,18 @@ func (m tuiModel) selectedSize() int64 {
 	return totalSize(m.selectedDirectories())
 }
 
-func (m *tuiModel) applyDeleteResult(result deleteResultMsg) {
+func (m *tuiModel) startFadeOut(result deleteResultMsg) {
 	deletedPaths := pathsFor(result.deleted)
-	remaining := make([]directoryInfo, 0, len(m.directories)-len(deletedPaths))
-	for _, directory := range m.directories {
+	m.removingPaths = deletedPaths
+	m.fadeOutRows = make(map[int]bool)
+	m.fadeOutTimer = 3
+
+	for i, directory := range m.directories {
 		if _, ok := deletedPaths[directory.Path]; ok {
-			continue
+			m.fadeOutRows[i] = true
 		}
-		remaining = append(remaining, directory)
 	}
 
-	m.directories = remaining
 	m.selected = make(map[int]struct{})
 	m.deleting = make(map[string]struct{})
 	m.busy = false
@@ -615,6 +734,25 @@ func (m *tuiModel) applyDeleteResult(result deleteResultMsg) {
 	} else {
 		m.message = fmt.Sprintf("Removed %d directories. Freed %s.", len(result.deleted), formatBytes(totalSize(result.deleted)))
 	}
+}
+
+func (m *tuiModel) completeFadeOut() {
+	deletedPaths := make(map[string]struct{}, len(m.removingPaths))
+	for path := range m.removingPaths {
+		deletedPaths[path] = struct{}{}
+	}
+	m.removingPaths = nil
+	m.fadeOutRows = nil
+
+	remaining := make([]directoryInfo, 0, len(m.directories))
+	for _, directory := range m.directories {
+		if _, ok := deletedPaths[directory.Path]; ok {
+			continue
+		}
+		remaining = append(remaining, directory)
+	}
+
+	m.directories = remaining
 
 	if len(m.directories) == 0 {
 		m.cursor = 0
@@ -625,6 +763,24 @@ func (m *tuiModel) applyDeleteResult(result deleteResultMsg) {
 		m.cursor = len(m.directories) - 1
 	}
 	m.clampOffset()
+}
+
+func scanDirectoriesCmd(root string, targets map[string]struct{}) tea.Cmd {
+	return func() tea.Msg {
+		started := time.Now()
+		directories, err := findDirectories(root, targets)
+		return scanResultMsg{
+			directories: directories,
+			elapsed:     time.Since(started),
+			err:         err,
+		}
+	}
+}
+
+func fadeOutTickCmd() tea.Cmd {
+	return tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg {
+		return fadeOutTickMsg{}
+	})
 }
 
 func deleteSelectedCmd(directories []directoryInfo) tea.Cmd {
@@ -668,6 +824,9 @@ func formatBytes(bytes int64) string {
 	for _, suffix := range units {
 		value /= unit
 		if value < unit {
+			if value >= 100 || value == float64(int64(value)) {
+				return fmt.Sprintf("%.0f %s", value, suffix)
+			}
 			return fmt.Sprintf("%.1f %s", value, suffix)
 		}
 	}

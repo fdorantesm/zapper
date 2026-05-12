@@ -8,7 +8,9 @@
 go run src/main.go --dirs node_modules,venv,.venv,__pycache__,dist,build,coverage
 ```
 
-By default, the CLI scans the current directory for common releasable targets including:
+This command runs the `zap` CLI, which scans the current directory for common releasable targets.
+
+By default, the CLI scans for targets including:
 
 - `node_modules`
 - `venv`
@@ -30,6 +32,25 @@ By default, the CLI scans the current directory for common releasable targets in
 - `.gradle`
 - `.terraform`
 - `.serverless`
+- `.DS_Store`
+- `Thumbs.db`
+- `npm-debug.log`
+- `yarn-debug.log`
+- `yarn-error.log`
+- `pnpm-debug.log`
+
+Use `--dry-run` to inspect matches in the TUI without deleting anything:
+
+```sh
+go run src/main.go --dry-run
+```
+
+Use `--yes` to skip the interactive confirmation prompt:
+
+```sh
+go run src/main.go --yes
+```
+
 - `.DS_Store`
 - `Thumbs.db`
 - `npm-debug.log`
