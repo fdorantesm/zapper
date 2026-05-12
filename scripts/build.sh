@@ -52,7 +52,7 @@ echo "Building $BINARY_NAME $VERSION for $TARGET_GOOS/$TARGET_GOARCH"
     -trimpath \
     -ldflags "-s -w -X main.appVersion=$VERSION" \
     -o "$OUTPUT" \
-    .
+    ./src
 )
 
 echo "$OUTPUT"
