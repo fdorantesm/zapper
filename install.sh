@@ -2,7 +2,7 @@
 set -e
 
 BINARY_NAME="zap"
-GITHUB_REPO="fdorantesm/go-zapper"
+GITHUB_REPO="fdorantesm/zapper"
 
 detect_platform() {
     platform="$(uname -ms)"
