@@ -1,0 +1,6 @@
+.DS_Store
+go-zap
+dist/
+*.exe
+*.test
+coverage.out
