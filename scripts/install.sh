@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_SCRIPT="$ROOT_DIR/scripts/build.sh"
+# This script installs zap by building it from source.
+# It can be run locally or via:
+# curl -fsSL https://raw.githubusercontent.com/fdorantesm/go-zapper/main/scripts/install.sh | bash
+
 BINARY_NAME="zap"
+REPO_URL="https://github.com/fdorantesm/go-zapper"
 
 detect_goos() {
   case "$(uname -s | tr '[:upper:]' '[:lower:]')" in
@@ -31,8 +34,8 @@ path_contains() {
 }
 
 choose_install_dir() {
-  if [[ -n "${MOP_INSTALL_DIR:-}" ]]; then
-    echo "$MOP_INSTALL_DIR"
+  if [[ -n "${ZAP_INSTALL_DIR:-}" ]]; then
+    echo "$ZAP_INSTALL_DIR"
     return
   fi
 
@@ -56,29 +59,22 @@ add_install_dir_to_path() {
     return
   fi
 
-  local shell_profile="$HOME/.profile"
+  local shell_profile=""
   if [[ -n "${ZSH_VERSION:-}" ]]; then
     shell_profile="$HOME/.zshrc"
   elif [[ -n "${BASH_VERSION:-}" ]]; then
     shell_profile="$HOME/.bashrc"
+  else
+    shell_profile="$HOME/.profile"
   fi
 
-  printf '\nexport PATH="%s:$PATH"\n' "$install_dir" >> "$shell_profile"
-  echo "Added $install_dir to PATH in $shell_profile. Restart your shell or run:"
+  if [[ -f "$shell_profile" ]]; then
+    printf '\nexport PATH="%s:$PATH"\n' "$install_dir" >> "$shell_profile"
+    echo "Added $install_dir to PATH in $shell_profile."
+  fi
+  
+  echo "Restart your shell or run:"
   echo "export PATH=\"$install_dir:\$PATH\""
-
-  if [[ "$(detect_goos)" == "windows" ]] && command -v powershell.exe >/dev/null 2>&1 && command -v cygpath >/dev/null 2>&1; then
-    local win_install_dir
-    win_install_dir="$(cygpath -w "$install_dir")"
-    WIN_INSTALL_DIR="$win_install_dir" powershell.exe -NoProfile -Command '
-      $dir = $env:WIN_INSTALL_DIR
-      $path = [Environment]::GetEnvironmentVariable("Path", "User")
-      if (($path -split ";") -notcontains $dir) {
-        [Environment]::SetEnvironmentVariable("Path", "$dir;$path", "User")
-      }
-    ' >/dev/null
-    echo "Updated the Windows user PATH. Open a new terminal for it to take effect."
-  fi
 }
 
 GOOS_VALUE="$(detect_goos)"
@@ -89,21 +85,47 @@ if [[ "$GOOS_VALUE" == "unsupported" || "$GOARCH_VALUE" == "unsupported" ]]; the
   exit 1
 fi
 
-EXT=""
-if [[ "$GOOS_VALUE" == "windows" ]]; then
-  EXT=".exe"
+if ! command -v go >/dev/null 2>&1; then
+  echo "Error: Go is not installed. Please install Go to build $BINARY_NAME." >&2
+  exit 1
+fi
+
+if ! command -v git >/dev/null 2>&1; then
+  echo "Error: git is not installed. Please install git to clone the repository." >&2
+  exit 1
 fi
 
 echo "Detected $GOOS_VALUE/$GOARCH_VALUE"
-ARTIFACT="$(GOOS="$GOOS_VALUE" GOARCH="$GOARCH_VALUE" "$BUILD_SCRIPT" | tail -n 1)"
+
+# Create a temporary directory for building
+TMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+echo "Cloning $REPO_URL..."
+git clone --depth 1 "$REPO_URL" "$TMP_DIR/repo" >/dev/null 2>&1
+
+echo "Building $BINARY_NAME..."
 INSTALL_DIR="$(choose_install_dir)"
 mkdir -p "$INSTALL_DIR"
 
+EXT=""
+[[ "$GOOS_VALUE" == "windows" ]] && EXT=".exe"
 INSTALL_PATH="$INSTALL_DIR/$BINARY_NAME$EXT"
-cp "$ARTIFACT" "$INSTALL_PATH"
+
+cd "$TMP_DIR/repo"
+VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+VERSION=${VERSION#v}
+
+GOOS="$GOOS_VALUE" GOARCH="$GOARCH_VALUE" go build \
+    -trimpath \
+    -ldflags "-s -w -X main.appVersion=$VERSION" \
+    -o "$INSTALL_PATH" \
+    ./src
+
 chmod +x "$INSTALL_PATH" 2>/dev/null || true
 
 add_install_dir_to_path "$INSTALL_DIR"
 
-echo "Installed $BINARY_NAME to $INSTALL_PATH"
+echo "Successfully installed $BINARY_NAME to $INSTALL_PATH"
 echo "Run: $BINARY_NAME --dry-run"
+

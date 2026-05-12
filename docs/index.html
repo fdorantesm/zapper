@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Zapper is a small terminal tool for finding and removing releasable development directories like node_modules, .next, dist, venv, and cache folders."
+    />
+    <title>Zapper - clean development directories</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            boxShadow: {
+              glow: "0 24px 90px rgba(0,0,0,.08)",
+            },
+            letterSpacing: {
+              tightest: "-.075em",
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+    </style>
+  </head>
+  <body
+    class="bg-white text-zinc-950 antialiased [text-rendering:geometricPrecision]"
+  >
+    <div
+      class="pointer-events-none fixed inset-x-0 top-0 -z-10 h-[620px] bg-[radial-gradient(circle_at_50%_0%,rgba(0,0,0,.07),transparent_34rem)]"
+    ></div>
+
+    <nav
+      class="sticky top-0 z-[100] border-b border-zinc-200/80 bg-white/75 backdrop-blur-xl"
+    >
+      <div
+        class="mx-auto flex h-16 w-[min(1120px,calc(100%-32px))] items-center justify-between"
+      >
+        <a
+          href="#top"
+          class="inline-flex items-center gap-2.5 font-semibold tracking-[-.03em]"
+          aria-label="Zapper home"
+        >
+          <span
+            class="grid size-7 place-items-center rounded-lg border border-zinc-800 bg-black font-mono text-[13px] text-white"
+            >z</span
+          >
+          <span>zapper</span>
+        </a>
+        <div class="flex items-center gap-6 text-sm text-zinc-500">
+          <a
+            class="flex items-center gap-2 transition hover:text-zinc-950"
+            href="https://github.com/fdorantesm/go-zapper"
+            rel="noreferrer"
+            target="_blank"
+          >
+            <svg
+              height="20"
+              width="20"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+              ></path>
+            </svg>
+            GitHub</a
+          >
+        </div>
+      </div>
+    </nav>
+
+    <main id="top">
+      <section
+        class="mx-auto w-[min(1120px,calc(100%-32px))] px-0 pb-20 pt-20 text-center md:pt-28"
+      >
+        <div
+          class="mb-6 inline-flex h-8 items-center gap-2 rounded-full border border-zinc-200 bg-white/75 px-3 text-[13px] text-zinc-500 shadow-sm"
+        >
+          <span
+            class="size-1.5 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,.14)]"
+          ></span>
+          Terminal cleanup for development workspaces
+        </div>
+
+        <h1
+          class="mx-auto max-w-4xl text-5xl font-semibold leading-[.92] tracking-tightest md:text-8xl"
+        >
+          Clean generated files from your projects.
+        </h1>
+        <p
+          class="mx-auto mt-7 max-w-2xl text-lg leading-8 tracking-[-.02em] text-zinc-500 md:text-xl"
+        >
+          Zapper scans your workspace for folders and files like
+          <code class="font-mono text-zinc-800">node_modules</code>,
+          <code class="font-mono text-zinc-800">.next</code>,
+          <code class="font-mono text-zinc-800">dist</code>, caches, and debug
+          logs. Review the list, select what you want to remove, and delete it
+          from the terminal.
+        </p>
+
+        <div class="mt-8 flex flex-wrap justify-center gap-3">
+          <a
+            class="inline-flex h-10 items-center justify-center rounded-full border border-black bg-black px-5 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:bg-zinc-800"
+            href="#quickstart"
+            >Read the docs</a
+          >
+        </div>
+
+        <div class="mx-auto mt-10 w-full max-w-[700px] px-4">
+          <div
+            class="group relative flex items-center justify-between rounded-2xl border border-white/5 bg-[#111820] p-4 font-mono text-sm leading-relaxed shadow-2xl"
+          >
+            <div class="flex gap-4 overflow-x-auto text-left no-scrollbar">
+              <span class="select-none text-emerald-500">$</span>
+              <code class="whitespace-nowrap text-zinc-300"
+                >curl -fsSL https://raw.githubusercontent.com/fdorantesm/go-zapper/main/scripts/install.sh | bash</code
+              >
+            </div>
+            <button
+              class="copy ml-4 flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-zinc-500 transition hover:border-white/20 hover:bg-white/10 hover:text-white"
+              data-copy="curl -fsSL https://raw.githubusercontent.com/fdorantesm/go-zapper/main/scripts/install.sh | bash"
+              aria-label="Copy install command"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path
+                  d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                ></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div
+          class="relative mx-auto mt-12 max-w-[1180px] rounded-[20px] bg-gradient-to-b from-zinc-300 to-transparent p-px"
+        >
+          <div
+            class="relative overflow-hidden rounded-[19px] border border-zinc-800/10 bg-[#111820] text-left shadow-glow"
+          >
+            <!-- Navigation Modal Overlay -->
+            <div
+              class="absolute inset-0 z-20 flex items-center justify-center bg-black/50 backdrop-blur-[1px]"
+            >
+              <div
+                class="w-[min(520px,calc(100%-40px))] rounded-xl border border-[#7DD3FC] bg-[#111820] p-6 font-mono text-sm shadow-[0_32px_64px_rgba(0,0,0,0.5)]"
+              >
+                <div class="mb-4 flex items-center justify-between text-[#7DD3FC]">
+                  <span class="font-bold">NAVIGATE</span>
+                  <span class="text-xs text-zinc-500">Path selection</span>
+                </div>
+                <div class="mb-2 text-xs text-zinc-400">Path: /Users/nano/workspace</div>
+                <div class="mb-4 border-b border-white/10 pb-2 text-[#7DD3FC]">
+                  / Filter/Jump: komuni_
+                </div>
+                <div class="space-y-1 text-zinc-300">
+                  <div class="rounded bg-[#2538B8] px-2 py-0.5 text-white">..</div>
+                  <div class="px-2 py-0.5 text-[#7DD3FC]">komuni-app/</div>
+                  <div class="px-2 py-0.5 text-[#7DD3FC]">komuni-api/</div>
+                  <div class="px-2 py-0.5 text-[#7DD3FC]">komuni-admin/</div>
+                </div>
+                <div class="mt-6 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-zinc-500">
+                  <span><b class="text-[#7DD3FC]">&lt;up/down&gt;</b> Move</span>
+                  <span><b class="text-[#7DD3FC]">&lt;enter&gt;</b> Enter/Jump</span>
+                  <span><b class="text-[#7DD3FC]">&lt;space&gt;</b> Select Root</span>
+                  <span><b class="text-[#7DD3FC]">&lt;esc&gt;</b> Close</span>
+                </div>
+              </div>
+            </div>
+
+            <div
+              class="grid min-w-[920px] grid-cols-[1fr_300px] gap-8 px-7 pb-7 pt-8 font-mono text-sm text-zinc-300"
+            >
+              <div class="min-w-0">
+                <pre
+                  class="m-0 overflow-hidden text-[clamp(7px,1vw,15px)] font-black leading-none tracking-[-.02em] text-[#BFC7D5]"
+                >
+░█████████  ░██████   ░████████  ░████████   ░███████  ░██░████ 
+     ░███        ░██  ░██    ░██ ░██    ░██ ░██    ░██ ░███     
+   ░███     ░███████  ░██    ░██ ░██    ░██ ░█████████ ░██      
+ ░███      ░██   ░██  ░███   ░██ ░███   ░██ ░██        ░██      
+░█████████  ░█████░██ ░██░█████  ░██░█████   ░███████  ░██      
+                      ░██        ░██                            
+                      ░██        ░██</pre
+                >
+                <div class="mt-5 truncate text-[15px] text-zinc-500">
+                  */komuni-app/*dist
+                </div>
+              </div>
+              <div
+                class="grid content-start justify-items-end gap-1 pt-1 text-right text-[15px] leading-tight md:text-[17px]"
+              >
+                <p>
+                  <span class="text-zinc-500">mode</span>
+                  <span class="font-bold text-[#E0E300]">DRY RUN</span>
+                </p>
+                <p>
+                  <span class="text-zinc-500">Releasable space:</span>
+                  <span class="text-[#7DD3FC]">10.63 GB</span>
+                </p>
+                <p>
+                  <span class="text-zinc-500">Selected space:</span>
+                  <span class="text-[#E0E300]">0.00 GB</span>
+                </p>
+                <p>
+                  <span class="text-zinc-500">Space saved:</span>
+                  <span class="font-bold text-[#4AF626]">0.00 GB</span>
+                </p>
+                <p>
+                  <span class="font-bold text-[#4AF626]">Search completed</span>
+                  <span class="text-zinc-500">34.14s</span>
+                </p>
+                <p>
+                  <span class="text-zinc-500">version</span>
+                  <span class="text-[#7DD3FC]">f49b31e-dirty</span>
+                </p>
+              </div>
+            </div>
+
+            <div
+              class="min-w-[920px] font-mono text-[13px] leading-[1.15] md:text-[15px]"
+            >
+              <div
+                class="grid grid-cols-[56px_minmax(0,1fr)_104px_96px] bg-[#B7BC00] px-7 py-1 font-bold text-[#10141A]"
+              >
+                <span>#</span>
+                <span>PATH</span>
+                <span class="text-right">LAST MOD</span>
+                <span class="text-right">SIZE ↓</span>
+              </div>
+              <div
+                class="grid grid-cols-[56px_minmax(0,1fr)_104px_96px] bg-[#2538B8] px-7 py-1 font-semibold text-white"
+              >
+                <span>1</span
+                ><span class="truncate">/Users/nano/workspace/.DS_Store</span
+                ><span class="text-right">1d</span
+                ><span class="text-right">28.0 KB</span>
+              </div>
+              <div
+                class="grid grid-cols-[56px_minmax(0,1fr)_104px_96px] px-7 py-1 text-zinc-300"
+              >
+                <span>2</span
+                ><span class="truncate"
+                  >/Users/nano/workspace/komuni/komuni-app/.DS_Store</span
+                ><span class="text-right">9d</span
+                ><span class="text-right">8.0 KB</span>
+              </div>
+              <div
+                class="grid grid-cols-[56px_minmax(0,1fr)_104px_96px] px-7 py-1 text-zinc-300"
+              >
+                <span>3</span
+                ><span class="truncate"
+                  >/Users/nano/workspace/komuni/komuni-app/.next</span
+                ><span class="text-right">6d</span
+                ><span class="text-right">463 MB</span>
+              </div>
+              <div
+                class="grid grid-cols-[56px_minmax(0,1fr)_104px_96px] px-7 py-1 text-zinc-300"
+              >
+                <span>4</span
+                ><span class="truncate"
+                  >/Users/nano/workspace/komuni/komuni-app/node_modules</span
+                ><span class="text-right">8d</span
+                ><span class="text-right">947 MB</span>
+              </div>
+              <div
+                class="grid grid-cols-[56px_minmax(0,1fr)_104px_96px] px-7 py-1 text-zinc-300"
+              >
+                <span>5</span
+                ><span class="truncate"
+                  >/Users/nano/workspace/komuni/komuni-app/dist</span
+                ><span class="text-right">2d</span
+                ><span class="text-right">38 MB</span>
+              </div>
+              <div
+                class="grid grid-cols-[56px_minmax(0,1fr)_104px_96px] px-7 py-1 text-zinc-300"
+              >
+                <span>6</span
+                ><span class="truncate"
+                  >/Users/nano/workspace/komuni/komuni-api/node_modules</span
+                ><span class="text-right">3d</span
+                ><span class="text-right">812 MB</span>
+              </div>
+              <div
+                class="grid grid-cols-[56px_minmax(0,1fr)_104px_96px] px-7 py-1 text-zinc-300"
+              >
+                <span>7</span
+                ><span class="truncate"
+                  >/Users/nano/workspace/komuni/komuni-api/build</span
+                ><span class="text-right">3d</span
+                ><span class="text-right">24 MB</span>
+              </div>
+              <div
+                class="grid grid-cols-[56px_minmax(0,1fr)_104px_96px] px-7 py-1 text-zinc-300"
+              >
+                <span>8</span
+                ><span class="truncate"
+                  >/Users/nano/workspace/komuni/komuni-api/coverage</span
+                ><span class="text-right">22h</span
+                ><span class="text-right">18 MB</span>
+              </div>
+              <div
+                class="grid grid-cols-[56px_minmax(0,1fr)_104px_96px] px-7 py-1 text-zinc-300"
+              >
+                <span>9</span
+                ><span class="truncate"
+                  >/Users/nano/workspace/komuni/komuni-admin/node_modules</span
+                ><span class="text-right">5d</span
+                ><span class="text-right">690 MB</span>
+              </div>
+              <div
+                class="grid grid-cols-[56px_minmax(0,1fr)_104px_96px] px-7 py-1 text-zinc-300"
+              >
+                <span>10</span
+                ><span class="truncate"
+                  >/Users/nano/workspace/komuni/komuni-admin/.next</span
+                ><span class="text-right">5d</span
+                ><span class="text-right">214 MB</span>
+              </div>
+              <div class="flex flex-wrap gap-x-7 gap-y-1 bg-[#202A35] px-7 py-1 text-zinc-400">
+                <span><b class="text-[#7DD3FC]">&lt;j/k&gt;</b> Move</span>
++                <span><b class="text-[#7DD3FC]">&lt;c&gt;</b> Change Dir</span>
+                <span><b class="text-[#7DD3FC]">&lt;:&gt;</b> regex filter</span>
+                <span><b class="text-[#7DD3FC]">&lt;s&gt;</b> Sort Size</span>
+                <span><b class="text-[#7DD3FC]">&lt;space&gt;</b> Select</span>
+                <span><b class="text-[#7DD3FC]">&lt;a&gt;</b> All</span>
+                <span><b class="text-[#7DD3FC]">&lt;d&gt;</b> Preview Delete</span>
+                <span><b class="text-[#7DD3FC]">&lt;q&gt;</b> Quit</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="features"
+        class="scroll-mt-24 border-t border-zinc-200 py-20 md:scroll-mt-28"
+      >
+        <div class="mx-auto w-[min(1120px,calc(100%-32px))]">
+          <div class="grid items-end gap-10 md:grid-cols-[.85fr_1.15fr]">
+            <h2
+              class="text-4xl font-semibold leading-none tracking-[-.06em] md:text-6xl"
+            >
+              Scan, review, delete.
+            </h2>
+            <p class="text-[17px] leading-8 text-zinc-500">
+              Run <code class="font-mono text-zinc-800">zap --dry-run</code> to
+              inspect matches first. Select rows in the TUI, then press
+              <code class="font-mono text-zinc-800">d</code> or
+              <code class="font-mono text-zinc-800">enter</code> to remove them.
+            </p>
+          </div>
+
+          <div class="mt-8 grid gap-3 md:grid-cols-3">
+            <article
+              class="min-h-44 rounded-[18px] border border-zinc-200 bg-white/70 p-6"
+            >
+              <small class="mb-8 block font-mono text-xs text-zinc-400"
+                >01 / Inspect</small
+              >
+              <h3 class="mb-2 text-xl font-semibold tracking-[-.035em]">
+                Check what will be removed
+              </h3>
+              <p class="text-sm leading-7 text-zinc-500">
+                Start with
+                <code class="font-mono text-zinc-800">zap --dry-run</code>. It
+                shows every match, its path, age, and size without deleting
+                anything.
+              </p>
+            </article>
+            <article
+              class="min-h-44 rounded-[18px] border border-zinc-200 bg-white/70 p-6"
+            >
+              <small class="mb-8 block font-mono text-xs text-zinc-400"
+                >02 / Select</small
+              >
+              <h3 class="mb-2 text-xl font-semibold tracking-[-.035em]">
+                Select the rows
+              </h3>
+              <p class="text-sm leading-7 text-zinc-500">
+                Move with <code class="font-mono text-zinc-800">j</code>/<code
+                  class="font-mono text-zinc-800"
+                  >k</code
+                >, select with space, or press
+                <code class="font-mono text-zinc-800">a</code> to select all
+                matches.
+              </p>
+            </article>
+            <article
+              class="min-h-44 rounded-[18px] border border-zinc-200 bg-white/70 p-6"
+            >
+              <small class="mb-8 block font-mono text-xs text-zinc-400"
+                >03 / Delete</small
+              >
+              <h3 class="mb-2 text-xl font-semibold tracking-[-.035em]">
+                Delete and see the total
+              </h3>
+              <p class="text-sm leading-7 text-zinc-500">
+                Press <code class="font-mono text-zinc-800">d</code> or
+                <code class="font-mono text-zinc-800">enter</code>. When it
+                finishes, zap prints how much space was saved.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="docs"
+        class="scroll-mt-24 border-t border-zinc-200 py-20 md:scroll-mt-28"
+      >
+        <div
+          class="mx-auto grid w-[min(1120px,calc(100%-32px))] gap-7 md:grid-cols-[260px_minmax(0,1fr)]"
+        >
+          <aside
+            class="top-24 grid gap-2 self-start rounded-[18px] border border-zinc-200 bg-white/80 p-4 md:sticky"
+            aria-label="Documentation sections"
+          >
+            <a
+              class="rounded-xl px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-950"
+              href="#quickstart"
+              >Quickstart</a
+            >
+            <a
+              class="rounded-xl px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-950"
+              href="#commands"
+              >Commands</a
+            >
+            <a
+              class="rounded-xl px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-950"
+              href="#targets"
+              >Default targets</a
+            >
+            <a
+              class="rounded-xl px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-950"
+              href="#keys"
+              >TUI keys</a
+            >
+          </aside>
+
+          <div class="grid gap-4">
+            <article
+              id="quickstart"
+              class="scroll-mt-24 rounded-[18px] border border-zinc-200 bg-white md:scroll-mt-28"
+            >
+              <header class="p-6 pb-0">
+                <h3 class="text-2xl font-semibold tracking-[-.04em]">
+                  Quickstart
+                </h3>
+                <p class="mt-2 leading-7 text-zinc-500">
+                  Run Zapper from source while developing locally.
+                </p>
+              </header>
+              <div
+                class="m-6 flex items-center justify-between gap-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4"
+              >
+                <code class="overflow-x-auto font-mono text-sm"
+                  >go run src/main.go --dry-run</code
+                >
+                <button
+                  class="copy rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-950"
+                  data-copy="go run src/main.go --dry-run"
+                >
+                  Copy
+                </button>
+              </div>
+            </article>
+
+            <article
+              id="commands"
+              class="scroll-mt-24 rounded-[18px] border border-zinc-200 bg-white md:scroll-mt-28"
+            >
+              <header class="p-6 pb-0">
+                <h3 class="text-2xl font-semibold tracking-[-.04em]">
+                  Commands
+                </h3>
+                <p class="mt-2 leading-7 text-zinc-500">
+                  Use <code class="font-mono text-zinc-800">zap</code> when
+                  installed as a binary.
+                </p>
+              </header>
+              <div
+                class="m-6 mb-3 flex items-center justify-between gap-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4"
+              >
+                <code class="overflow-x-auto font-mono text-sm"
+                  >zap --dry-run</code
+                >
+                <button
+                  class="copy rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-950"
+                  data-copy="zap --dry-run"
+                >
+                  Copy
+                </button>
+              </div>
+              <div
+                class="mx-6 mb-3 flex items-center justify-between gap-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4"
+              >
+                <code class="overflow-x-auto font-mono text-sm"
+                  >zap --root ~/workspace --dirs node_modules,dist,.next</code
+                >
+                <button
+                  class="copy rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-950"
+                  data-copy="zap --root ~/workspace --dirs node_modules,dist,.next"
+                >
+                  Copy
+                </button>
+              </div>
+              <div
+                class="m-6 mt-0 flex items-center justify-between gap-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4"
+              >
+                <code class="overflow-x-auto font-mono text-sm"
+                  >zap --yes --dirs node_modules,venv</code
+                >
+                <button
+                  class="copy rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-950"
+                  data-copy="zap --yes --dirs node_modules,venv"
+                >
+                  Copy
+                </button>
+              </div>
+            </article>
+
+            <article
+              id="targets"
+              class="scroll-mt-24 rounded-[18px] border border-zinc-200 bg-white md:scroll-mt-28"
+            >
+              <header class="p-6 pb-0">
+                <h3 class="text-2xl font-semibold tracking-[-.04em]">
+                  Default targets
+                </h3>
+                <p class="mt-2 leading-7 text-zinc-500">
+                  These names are scanned by default and can be replaced with
+                  <code class="font-mono text-zinc-800">--dirs</code>.
+                </p>
+              </header>
+              <div class="flex flex-wrap gap-2 p-6">
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >node_modules</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >venv</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >.venv</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >__pycache__</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >dist</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >build</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >coverage</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >.next</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >.nuxt</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >.turbo</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >.cache</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >target</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >.gradle</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >.terraform</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >debug logs</span
+                >
+              </div>
+            </article>
+
+            <article
+              id="keys"
+              class="scroll-mt-24 rounded-[18px] border border-zinc-200 bg-white md:scroll-mt-28"
+            >
+              <header class="p-6 pb-0">
+                <h3 class="text-2xl font-semibold tracking-[-.04em]">
+                  TUI keys
+                </h3>
+                <p class="mt-2 leading-7 text-zinc-500">
+                  Navigate and clean without leaving the keyboard.
+                </p>
+              </header>
+              <div class="flex flex-wrap gap-2 p-6">
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >up/down</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >j/k</span
+                >
++                <span
++                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
++                  >c change dir</span
++                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >space select</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >: regex filter</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >esc hide filter</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >s sort size</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >a select all</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >d delete</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >enter delete</span
+                >
+                <span
+                  class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-700"
+                  >q quit</span
+                >
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      document.querySelectorAll("[data-copy]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          await navigator.clipboard.writeText(button.dataset.copy);
+          const original = button.innerHTML;
+          if (button.innerText.trim() === "Copy") {
+            button.innerText = "Copied";
+          } else {
+            // For icon-only or mixed buttons, we can show a temporary checkmark or just text
+            button.innerHTML = '<span class="text-[10px]">Copied</span>';
+          }
+          setTimeout(() => {
+            button.innerHTML = original;
+          }, 1500);
+        });
+      });
+    </script>
+  </body>
+</html>
