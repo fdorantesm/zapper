@@ -55,4 +55,4 @@ echo "Building $BINARY_NAME $VERSION for $TARGET_GOOS/$TARGET_GOARCH"
     ./src
 )
 
-echo "$OUTPUT"
+echo "Built: $OUTPUT"
