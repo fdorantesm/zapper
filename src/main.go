@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -183,6 +184,21 @@ func parseDirectoryNames(value string) map[string]struct{} {
 	return targets
 }
 
+func isPermissionError(err error) bool {
+	err = underlyingError(err)
+	return err == syscall.EACCES || err == syscall.EPERM
+}
+
+func underlyingError(err error) error {
+	for {
+		pe := err.(*os.PathError)
+		if pe.Err == nil {
+			return pe
+		}
+		err = pe.Err
+	}
+}
+
 func findDirectories(root string, targets map[string]struct{}) ([]directoryInfo, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -192,6 +208,9 @@ func findDirectories(root string, targets map[string]struct{}) ([]directoryInfo,
 	var directories []directoryInfo
 	err = filepath.WalkDir(absRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
+			if isPermissionError(walkErr) {
+				return nil
+			}
 			log.Printf("Skipping %s: %v", path, walkErr)
 			return nil
 		}
@@ -200,6 +219,9 @@ func findDirectories(root string, targets map[string]struct{}) ([]directoryInfo,
 			if _, ok := targets[entry.Name()]; ok {
 				info, err := directoryStats(path)
 				if err != nil {
+					if isPermissionError(err) {
+						return nil
+					}
 					log.Printf("Skipping %s: %v", path, err)
 					if !entry.IsDir() {
 						return nil
