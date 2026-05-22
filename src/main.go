@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io/fs"
@@ -186,17 +187,19 @@ func parseDirectoryNames(value string) map[string]struct{} {
 
 func isPermissionError(err error) bool {
 	err = underlyingError(err)
-	return err == syscall.EACCES || err == syscall.EPERM
+	var perr *os.PathError
+	if ok := errors.As(err, &perr); ok {
+		err = perr.Err
+	}
+	return errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM)
 }
 
 func underlyingError(err error) error {
-	for {
-		pe := err.(*os.PathError)
-		if pe.Err == nil {
-			return pe
-		}
-		err = pe.Err
+	var perr *os.PathError
+	if ok := errors.As(err, &perr); ok {
+		return underlyingError(perr.Err)
 	}
+	return err
 }
 
 func findDirectories(root string, targets map[string]struct{}) ([]directoryInfo, error) {
