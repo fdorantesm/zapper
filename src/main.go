@@ -1046,7 +1046,20 @@ func (m tuiModel) footer() string {
 		))
 	}
 	if m.message != "" {
-		return footerStyle.Width(m.width).Render(" " + m.message)
+		deleteLabel := "Delete"
+		if m.dryRun {
+			deleteLabel = "Preview Delete"
+		}
+		return footerStyle.Width(m.width).Render(" " + m.message + "   " + shortcuts(
+			shortcut("j/k", "Move"),
+			shortcut("c", "Change Dir"),
+			shortcut(":", "Filter"),
+			shortcut("s", "Sort Size"),
+			shortcut("space", "Select"),
+			shortcut("a", "All"),
+			shortcut("d", deleteLabel),
+			shortcut("q", "Quit"),
+		))
 	}
 
 	deleteLabel := "Delete"
