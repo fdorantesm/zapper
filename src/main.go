@@ -124,7 +124,13 @@ func main() {
 	rootFlag := flag.String("root", ".", "root directory to scan")
 	dryRun := flag.Bool("dry-run", false, "show what would be deleted without removing files")
 	yes := flag.Bool("yes", false, "delete all found directories without prompting")
+	version := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *version {
+		fmt.Println("zap version", appVersion)
+		return
+	}
 
 	targets := parseDirectoryNames(*dirsFlag)
 	if len(targets) == 0 {
@@ -155,7 +161,8 @@ func printUsage() {
 	fmt.Fprintf(flag.CommandLine.Output(), "Examples:\n")
 	fmt.Fprintf(flag.CommandLine.Output(), "  zap --dry-run\n")
 	fmt.Fprintf(flag.CommandLine.Output(), "  zap --root ~/workspace --dirs node_modules,dist,.next\n")
-	fmt.Fprintf(flag.CommandLine.Output(), "  zap --yes --dirs node_modules,venv\n\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "  zap --yes --dirs node_modules,venv\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "  zap --version\n\n")
 	fmt.Fprintf(flag.CommandLine.Output(), "Options:\n")
 	flag.PrintDefaults()
 }
