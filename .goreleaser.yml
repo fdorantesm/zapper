@@ -1,0 +1,26 @@
+version: 2
+project_name: zap
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    dir: .
+    main: ./src
+    binary: zap
+    ldflags:
+      - -s -w -X main.appVersion={{.Version}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: zap
+    files:
+      - none

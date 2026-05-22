@@ -17,6 +17,14 @@ detect_platform() {
     esac
 }
 
+get_install_dir() {
+    case "$(uname -s | tr '[:upper:]' '[:lower:]')" in
+        linux*|darwin*) echo "/usr/local/bin" ;;
+        mingw*|msys*|cygwin*) echo "C:\\Windows\\System32" ;;
+        *) echo "/usr/local/bin" ;;
+    esac
+}
+
 get_latest_version() {
     curl --silent "https://api.github.com/repos/$GITHUB_REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/'
 }
@@ -26,14 +34,14 @@ install_bin() {
     url="https://github.com/$GITHUB_REPO/releases/download/$VERSION/zap-$target"
 
     if command -v curl >/dev/null 2>&1; then
-        curl -L "$url" -o "$HOME/bin/$BINARY_NAME"
+        curl -L "$url" -o "$INSTALL_DIR/$BINARY_NAME"
     elif command -v wget >/dev/null 2>&1; then
-        wget -O "$HOME/bin/$BINARY_NAME" "$url"
+        wget -O "$INSTALL_DIR/$BINARY_NAME" "$url"
     else
         echo "Error: curl or wget is required"
         exit 1
     fi
-    chmod +x "$HOME/bin/$BINARY_NAME"
+    chmod +x "$INSTALL_DIR/$BINARY_NAME"
 }
 
 echo "Installing $BINARY_NAME..."
@@ -50,10 +58,12 @@ if [ -z "$VERSION" ]; then
     exit 1
 fi
 
-if [ ! -d "$HOME/bin" ]; then
-    mkdir -p "$HOME/bin"
+INSTALL_DIR="$(get_install_dir)"
+
+if [ ! -d "$INSTALL_DIR" ]; then
+    mkdir -p "$INSTALL_DIR"
 fi
 
 install_bin "$TARGET"
 
-echo "$BINARY_NAME installed successfully to $HOME/bin/$BINARY_NAME"
+echo "$BINARY_NAME installed successfully to $INSTALL_DIR/$BINARY_NAME"
