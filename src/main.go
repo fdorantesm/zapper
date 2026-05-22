@@ -723,8 +723,14 @@ func (m tuiModel) View() string {
 }
 
 func overlay(bg, fg string, width, height int) string {
+	if bg == "" || fg == "" {
+		return bg
+	}
 	bgLines := strings.Split(bg, "\n")
 	fgLines := strings.Split(fg, "\n")
+	if len(fgLines) == 0 || len(bgLines) == 0 {
+		return bg
+	}
 
 	fgWidth := lipgloss.Width(fgLines[0])
 	fgHeight := len(fgLines)
@@ -761,7 +767,7 @@ func overlay(bg, fg string, width, height int) string {
 
 // truncateLeft removes 'w' visual cells from the beginning of string 's'.
 func truncateLeft(s string, w int) string {
-	if w <= 0 {
+	if w <= 0 || s == "" {
 		return s
 	}
 	// We use a trick: truncate the string to its full width (no-op but cleans up),
