@@ -431,7 +431,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.clampNavOffset()
 			case "down", "j":
-				if m.navCursor < m.filteredNavCount()-1 {
+				if m.filteredNavCount() > 0 && m.navCursor < m.filteredNavCount()-1 {
 					m.navCursor++
 				}
 				m.clampNavOffset()
@@ -531,11 +531,14 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.clampOffset()
 		case "down", "j":
-			if m.cursor < m.filteredCount()-1 {
+			if m.filteredCount() > 0 && m.cursor < m.filteredCount()-1 {
 				m.cursor++
 			}
 			m.clampOffset()
 		case "pgup", "b":
+			if m.filteredCount() == 0 {
+				break
+			}
 			m.cursor -= m.listHeight()
 			if m.cursor < 0 {
 				m.cursor = 0
