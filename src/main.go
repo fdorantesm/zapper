@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io/fs"
@@ -10,6 +11,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -124,7 +126,13 @@ func main() {
 	rootFlag := flag.String("root", ".", "root directory to scan")
 	dryRun := flag.Bool("dry-run", false, "show what would be deleted without removing files")
 	yes := flag.Bool("yes", false, "delete all found directories without prompting")
+	version := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *version {
+		fmt.Println("zap version", appVersion)
+		return
+	}
 
 	targets := parseDirectoryNames(*dirsFlag)
 	if len(targets) == 0 {
@@ -155,7 +163,8 @@ func printUsage() {
 	fmt.Fprintf(flag.CommandLine.Output(), "Examples:\n")
 	fmt.Fprintf(flag.CommandLine.Output(), "  zap --dry-run\n")
 	fmt.Fprintf(flag.CommandLine.Output(), "  zap --root ~/workspace --dirs node_modules,dist,.next\n")
-	fmt.Fprintf(flag.CommandLine.Output(), "  zap --yes --dirs node_modules,venv\n\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "  zap --yes --dirs node_modules,venv\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "  zap --version\n\n")
 	fmt.Fprintf(flag.CommandLine.Output(), "Options:\n")
 	flag.PrintDefaults()
 }
@@ -176,6 +185,23 @@ func parseDirectoryNames(value string) map[string]struct{} {
 	return targets
 }
 
+func isPermissionError(err error) bool {
+	err = underlyingError(err)
+	var perr *os.PathError
+	if ok := errors.As(err, &perr); ok {
+		err = perr.Err
+	}
+	return errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM)
+}
+
+func underlyingError(err error) error {
+	var perr *os.PathError
+	if ok := errors.As(err, &perr); ok {
+		return underlyingError(perr.Err)
+	}
+	return err
+}
+
 func findDirectories(root string, targets map[string]struct{}) ([]directoryInfo, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -185,6 +211,9 @@ func findDirectories(root string, targets map[string]struct{}) ([]directoryInfo,
 	var directories []directoryInfo
 	err = filepath.WalkDir(absRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
+			if isPermissionError(walkErr) {
+				return nil
+			}
 			log.Printf("Skipping %s: %v", path, walkErr)
 			return nil
 		}
@@ -193,6 +222,9 @@ func findDirectories(root string, targets map[string]struct{}) ([]directoryInfo,
 			if _, ok := targets[entry.Name()]; ok {
 				info, err := directoryStats(path)
 				if err != nil {
+					if isPermissionError(err) {
+						return nil
+					}
 					log.Printf("Skipping %s: %v", path, err)
 					if !entry.IsDir() {
 						return nil
@@ -402,7 +434,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.clampNavOffset()
 			case "down", "j":
-				if m.navCursor < m.filteredNavCount()-1 {
+				if m.filteredNavCount() > 0 && m.navCursor < m.filteredNavCount()-1 {
 					m.navCursor++
 				}
 				m.clampNavOffset()
@@ -502,11 +534,14 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.clampOffset()
 		case "down", "j":
-			if m.cursor < m.filteredCount()-1 {
+			if m.filteredCount() > 0 && m.cursor < m.filteredCount()-1 {
 				m.cursor++
 			}
 			m.clampOffset()
 		case "pgup", "b":
+			if m.filteredCount() == 0 {
+				break
+			}
 			m.cursor -= m.listHeight()
 			if m.cursor < 0 {
 				m.cursor = 0
@@ -582,6 +617,12 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m tuiModel) View() string {
+	if m.width < 20 {
+		m.width = 80
+	}
+	if m.height < 10 {
+		m.height = 24
+	}
 	if m.loading {
 		loadingContent := fmt.Sprintf("%s Scanning directories...", m.spinner.View())
 		return lipgloss.NewStyle().
@@ -685,8 +726,14 @@ func (m tuiModel) View() string {
 }
 
 func overlay(bg, fg string, width, height int) string {
+	if bg == "" || fg == "" {
+		return bg
+	}
 	bgLines := strings.Split(bg, "\n")
 	fgLines := strings.Split(fg, "\n")
+	if len(fgLines) == 0 || len(bgLines) == 0 {
+		return bg
+	}
 
 	fgWidth := lipgloss.Width(fgLines[0])
 	fgHeight := len(fgLines)
@@ -723,7 +770,7 @@ func overlay(bg, fg string, width, height int) string {
 
 // truncateLeft removes 'w' visual cells from the beginning of string 's'.
 func truncateLeft(s string, w int) string {
-	if w <= 0 {
+	if w <= 0 || s == "" {
 		return s
 	}
 	// We use a trick: truncate the string to its full width (no-op but cleans up),
@@ -918,6 +965,12 @@ func (m tuiModel) tableHeader() string {
 func (m tuiModel) rows() string {
 	var rows []string
 	filtered := m.filteredDirectories()
+	if len(filtered) == 0 {
+		for i := 0; i < m.listHeight(); i++ {
+			rows = append(rows, rowStyle.Width(m.width).Render(""))
+		}
+		return strings.Join(rows, "\n")
+	}
 	visible := m.visibleRange()
 	pathWidth := m.pathWidth()
 
@@ -1017,7 +1070,22 @@ func (m tuiModel) footer() string {
 		))
 	}
 	if m.message != "" {
-		return footerStyle.Width(m.width).Render(" " + m.message)
+		deleteLabel := "Delete"
+		if m.dryRun {
+			deleteLabel = "Preview Delete"
+		}
+		msgLine := footerStyle.Width(m.width).Render(" " + m.message)
+		shortcutLine := footerStyle.Width(m.width).Render(" " + shortcuts(
+			shortcut("j/k", "Move"),
+			shortcut("c", "Change Dir"),
+			shortcut(":", "Filter"),
+			shortcut("s", "Sort Size"),
+			shortcut("space", "Select"),
+			shortcut("a", "All"),
+			shortcut("d", deleteLabel),
+			shortcut("q", "Quit"),
+		))
+		return msgLine + "\n" + shortcutLine
 	}
 
 	deleteLabel := "Delete"
