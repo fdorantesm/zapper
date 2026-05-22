@@ -614,6 +614,12 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m tuiModel) View() string {
+	if m.width < 20 {
+		m.width = 80
+	}
+	if m.height < 10 {
+		m.height = 24
+	}
 	if m.loading {
 		loadingContent := fmt.Sprintf("%s Scanning directories...", m.spinner.View())
 		return lipgloss.NewStyle().
@@ -950,6 +956,12 @@ func (m tuiModel) tableHeader() string {
 func (m tuiModel) rows() string {
 	var rows []string
 	filtered := m.filteredDirectories()
+	if len(filtered) == 0 {
+		for i := 0; i < m.listHeight(); i++ {
+			rows = append(rows, rowStyle.Width(m.width).Render(""))
+		}
+		return strings.Join(rows, "\n")
+	}
 	visible := m.visibleRange()
 	pathWidth := m.pathWidth()
 
