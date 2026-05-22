@@ -20,15 +20,16 @@ detect_platform() {
 get_install_dir() {
     case "$(uname -s | tr '[:upper:]' '[:lower:]')" in
         linux*|darwin*)
-            if [ -w /usr/local/bin ]; then
-                echo "/usr/local/bin"
-            elif [ -w "$HOME/bin" ]; then
-                echo "$HOME/bin"
-            elif [ -w "$HOME/.local/bin" ]; then
-                echo "$HOME/.local/bin"
-            else
-                echo "$HOME/bin"
-            fi
+            for dir in /usr/local/bin "$HOME/.local/bin" "$HOME/bin"; do
+                if [ -d "$dir" ]; then
+                    if touch "$dir/.write_test" 2>/dev/null; then
+                        rm -f "$dir/.write_test"
+                        echo "$dir"
+                        return
+                    fi
+                fi
+            done
+            echo "$HOME/bin"
             ;;
         mingw*|msys*|cygwin*) echo "C:\\Windows\\System32" ;;
         *) echo "/usr/local/bin" ;;
@@ -42,14 +43,23 @@ get_latest_version() {
 install_bin() {
     target="$1"
     url="https://github.com/$GITHUB_REPO/releases/download/$VERSION/zap-$target"
+    tmpfile="$(mktemp "$BINARY_NAME.XXXXXX")"
 
     if command -v curl >/dev/null 2>&1; then
-        curl -L "$url" -o "$INSTALL_DIR/$BINARY_NAME"
+        curl -L "$url" -o "$tmpfile"
     elif command -v wget >/dev/null 2>&1; then
-        wget -O "$INSTALL_DIR/$BINARY_NAME" "$url"
+        wget -O "$tmpfile" "$url"
     else
         echo "Error: curl or wget is required"
         exit 1
+    fi
+
+    if [ -w "$INSTALL_DIR" ]; then
+        mv "$tmpfile" "$INSTALL_DIR/$BINARY_NAME"
+    else
+        sudo mv "$tmpfile" "$INSTALL_DIR/$BINARY_NAME"
+        sudo chmod +x "$INSTALL_DIR/$BINARY_NAME"
+        return
     fi
     chmod +x "$INSTALL_DIR/$BINARY_NAME"
 }
@@ -72,6 +82,9 @@ INSTALL_DIR="$(get_install_dir)"
 
 if [ ! -d "$INSTALL_DIR" ]; then
     mkdir -p "$INSTALL_DIR"
+elif [ ! -w "$INSTALL_DIR" ]; then
+    echo "Error: $INSTALL_DIR is not writable. Try running with sudo."
+    exit 1
 fi
 
 install_bin "$TARGET"
