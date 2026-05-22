@@ -19,7 +19,17 @@ detect_platform() {
 
 get_install_dir() {
     case "$(uname -s | tr '[:upper:]' '[:lower:]')" in
-        linux*|darwin*) echo "/usr/local/bin" ;;
+        linux*|darwin*)
+            if [ -w /usr/local/bin ]; then
+                echo "/usr/local/bin"
+            elif [ -w "$HOME/bin" ]; then
+                echo "$HOME/bin"
+            elif [ -w "$HOME/.local/bin" ]; then
+                echo "$HOME/.local/bin"
+            else
+                echo "$HOME/bin"
+            fi
+            ;;
         mingw*|msys*|cygwin*) echo "C:\\Windows\\System32" ;;
         *) echo "/usr/local/bin" ;;
     esac
